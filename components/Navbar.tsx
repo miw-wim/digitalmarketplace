@@ -39,6 +39,12 @@ export default function Navbar() {
           ))}
         </div>
 
+        {/* Sign in / Sign up */}
+        <div className="hidden md:flex items-center gap-3">
+          <Link href="/login" className="text-sm text-gray-400 hover:text-white transition-colors">Sign in</Link>
+          <Link href="/register" className="text-sm bg-violet-600 hover:bg-violet-500 text-white px-4 py-1.5 rounded-lg font-medium transition-colors">Sign up</Link>
+        </div>
+
         {/* Mobile hamburger */}
         <button className="md:hidden text-gray-400 hover:text-white" onClick={() => setMenuOpen(!menuOpen)}>
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -63,6 +69,10 @@ export default function Navbar() {
               {l.label}
             </Link>
           ))}
+          <div className="border-t border-white/10 mt-2 pt-2 flex flex-col gap-1">
+            <Link href="/login" onClick={() => setMenuOpen(false)} className="px-3 py-2 text-sm text-gray-400 hover:text-white">Sign in</Link>
+            <Link href="/register" onClick={() => setMenuOpen(false)} className="px-3 py-2 text-sm text-violet-400 hover:text-violet-300">Sign up</Link>
+          </div>
         </div>
       )}
     </nav>
