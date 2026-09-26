@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/Toast";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -16,11 +17,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${geist.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-[#080812] text-white antialiased">
-        <ToastProvider>
-          <Navbar />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </ToastProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <Navbar />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

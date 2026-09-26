@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiGetDashboardStats, apiGetActivity } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { DashboardStats, ActivityItem } from "@/lib/types";
 
 const activityIcons: Record<string, string> = {
@@ -23,9 +25,16 @@ function StatCard({ label, value, sub, color }: { label: string; value: number |
 }
 
 export default function DashboardPage() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
+  };
 
   useEffect(() => {
     Promise.all([apiGetDashboardStats(), apiGetActivity()]).then(([s, a]) => {
@@ -45,11 +54,17 @@ export default function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-white">
-          Hey there 👋
-        </h1>
-        <p className="text-gray-400 mt-1">Here&apos;s what&apos;s happening with your marketplace activity.</p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-white">
+            Hey{user?.name ? `, ${user.name}` : " there"} 👋
+          </h1>
+          <p className="text-gray-400 mt-1">Here&apos;s what&apos;s happening with your marketplace activity.</p>
+        </div>
+        <button onClick={handleLogout}
+          className="px-4 py-2 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/40 text-gray-400 hover:text-red-400 text-sm font-medium rounded-xl transition-all">
+          Log out
+        </button>
       </div>
 
       {/* Stats */}

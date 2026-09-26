@@ -6,6 +6,9 @@ import { useToast } from "@/components/Toast";
 
 type Step = "email" | "new-password" | "done";
 
+const inp = (hasError: boolean) =>
+  `w-full px-4 py-3 bg-white/5 border ${hasError ? "border-red-500" : "border-white/15"} rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all`;
+
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -40,9 +43,6 @@ export default function ForgotPasswordPage() {
     setTimeout(() => router.push("/login"), 2000);
   };
 
-  const inp = (hasError: boolean) =>
-    `w-full px-4 py-3 bg-white/5 border ${hasError ? "border-red-500" : "border-white/15"} rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition-all`;
-
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
@@ -57,16 +57,12 @@ export default function ForgotPasswordPage() {
               <form onSubmit={handleEmail} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1.5">Email</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
-                    placeholder="you@email.com"
-                    className={inp(!!emailError)}
-                  />
+                  <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
+                    placeholder="you@email.com" className={inp(!!emailError)} />
                   {emailError && <p className="text-xs text-red-400 mt-1">{emailError}</p>}
                 </div>
-                <button type="submit" disabled={loading} className="w-full py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors">
+                <button type="submit" disabled={loading}
+                  className="w-full py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors">
                   {loading ? "Checking…" : "Continue"}
                 </button>
               </form>
@@ -95,7 +91,8 @@ export default function ForgotPasswordPage() {
                     placeholder="Repeat password" className={inp(!!pwErrors.confirm)} />
                   {pwErrors.confirm && <p className="text-xs text-red-400 mt-1">{pwErrors.confirm}</p>}
                 </div>
-                <button type="submit" disabled={loading} className="w-full py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors">
+                <button type="submit" disabled={loading}
+                  className="w-full py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors">
                   {loading ? "Resetting…" : "Reset password"}
                 </button>
               </form>

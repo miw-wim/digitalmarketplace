@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/lib/auth-context";
 import { apiGetConversations, apiGetMessages, apiSendMessage } from "@/lib/api";
 import type { Conversation, Message } from "@/lib/types";
 
@@ -14,7 +13,6 @@ function timeAgo(iso: string) {
 }
 
 export default function MessagesPage() {
-  const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
@@ -118,7 +116,7 @@ export default function MessagesPage() {
                   <p className="text-center text-gray-500 text-sm py-8">No messages yet. Say hello!</p>
                 ) : (
                   messages.map((msg) => {
-                    const isMe = msg.senderId === (user?.id ?? "u1");
+                    const isMe = msg.senderId === "u1";
                     return (
                       <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl text-sm ${isMe ? "bg-violet-600 text-white rounded-br-sm" : "bg-white/10 text-gray-200 rounded-bl-sm"}`}>

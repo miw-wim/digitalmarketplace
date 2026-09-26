@@ -4,28 +4,18 @@ import {
   MOCK_MESSAGES, MOCK_ACTIVITY, MOCK_DASHBOARD_STATS, MOCK_ADMIN_STATS,
 } from "./mock-data";
 
+// Stub delay — replace each function body with a real Supabase call later
 const delay = () => new Promise((r) => setTimeout(r, 800));
 
-// Auth
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 export async function apiRegister(_data: { name: string; email: string; password: string }) {
-  await delay();
-  return { success: true };
-}
-
-export async function apiVerifyOtp(_email: string, _otp: string) {
-  await delay();
-  return { success: true };
-}
-
-export async function apiResendOtp(_email: string) {
   await delay();
   return { success: true };
 }
 
 export async function apiLogin(_email: string, _password: string) {
   await delay();
-  const user = MOCK_USERS.find((u) => u.email === _email) ?? MOCK_USERS[0];
-  return { success: true, requiresOtp: true, user };
+  return { success: true };
 }
 
 export async function apiForgotPassword(_email: string) {
@@ -33,12 +23,12 @@ export async function apiForgotPassword(_email: string) {
   return { success: true };
 }
 
-export async function apiResetPassword(_email: string, _otp: string, _password: string) {
+export async function apiResetPassword(_email: string, _password: string) {
   await delay();
   return { success: true };
 }
 
-// Listings
+// ─── Listings ─────────────────────────────────────────────────────────────────
 export async function apiGetListings(): Promise<Listing[]> {
   await delay();
   return MOCK_LISTINGS;
@@ -56,15 +46,14 @@ export async function apiCreateListing(_data: Partial<Listing>): Promise<Listing
 
 export async function apiUpdateListing(id: string, _data: Partial<Listing>): Promise<Listing> {
   await delay();
-  const existing = MOCK_LISTINGS.find((l) => l.id === id) ?? MOCK_LISTINGS[0];
-  return { ...existing, ..._data };
+  return { ...(MOCK_LISTINGS.find((l) => l.id === id) ?? MOCK_LISTINGS[0]), ..._data };
 }
 
 export async function apiDeleteListing(_id: string): Promise<void> {
   await delay();
 }
 
-// Users (admin)
+// ─── Users (admin) ────────────────────────────────────────────────────────────
 export async function apiGetUsers(): Promise<User[]> {
   await delay();
   return MOCK_USERS;
@@ -74,7 +63,7 @@ export async function apiToggleUserStatus(_id: string): Promise<void> {
   await delay();
 }
 
-// Messages
+// ─── Messages ─────────────────────────────────────────────────────────────────
 export async function apiGetConversations(): Promise<Conversation[]> {
   await delay();
   return MOCK_CONVERSATIONS;
@@ -97,7 +86,7 @@ export async function apiSendMessage(_conversationId: string, _content: string):
   };
 }
 
-// Dashboard
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 export async function apiGetDashboardStats(): Promise<DashboardStats> {
   await delay();
   return MOCK_DASHBOARD_STATS;
