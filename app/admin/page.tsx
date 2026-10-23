@@ -1,154 +1,219 @@
 "use client";
 import { useState, useEffect } from "react";
-import DataTable from "@/components/DataTable";
-import { useToast } from "@/components/Toast";
-import { apiGetAdminStats, apiGetUsers, apiGetListings, apiToggleUserStatus, apiDeleteListing } from "@/lib/api";
-import type { AdminStats, User, Listing } from "@/lib/types";
+import StatCard from "@/components/admin/StatCard";
+import ChartCard from "@/components/admin/ChartCard";
+import Link from "next/link";
+import type { SalesDataPoint, OrderStatusDataPoint, CategoryDataPoint } from "@/lib/types";
+import { MOCK_SALES_DATA, MOCK_ORDER_STATUS_DATA, MOCK_CATEGORY_DATA, MOCK_ACTIVITY_LOGS } from "@/lib/mock-data";
+import { supabase } from "@/lib/supabase";
 
-type Tab = "overview" | "users" | "listings";
-
-function StatCard({ label, value, color, icon }: { label: string; value: number; color: string; icon: string }) {
-  return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-2xl">{icon}</span>
-        <span className={`text-3xl font-black ${color}`}>{value}</span>
-      </div>
-      <p className="text-sm text-gray-400">{label}</p>
-    </div>
-  );
+interface RealStats {
+  totalUsers: number;
+  newUsersThisWeek: number;
+  activeListings: number;
+  totalOrders: number;
+  totalSalesAmount: number;
+  openDisputes: number;
+  pendingModeration: number;
 }
 
-export default function AdminPage() {
-  const { showToast } = useToast();  const [tab, setTab] = useState<Tab>("overview");
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [listings, setListings] = useState<Listing[]>([]);
+const actionIcons: Record<string, string> = {
+  login: "🔐", listing_created: "📦", listing_approved: "✅", listing_rejected: "❌",
+  order_placed: "🛒", dispute_opened: "⚠️", dispute_resolved: "🔒", user_suspended: "🚫",
+  user_activated: "✅", role_changed: "👑", message_sent: "💬", account_created: "👤",
+  listing_removed: "🗑️", order_status_changed: "🔄", logout: "👋",
+};
+
+export default function AdminOverviewPage() {
+  const [stats, setStats] = useState<RealStats | null>(null);
+  const [sales] = useState<SalesDataPoint[]>(MOCK_SALES_DATA);
+  const [orderStatus, setOrderStatus] = useState<OrderStatusDataPoint[]>(MOCK_ORDER_STATUS_DATA);
+  const [categoryData, setCategoryData] = useState<CategoryDataPoint[]>(MOCK_CATEGORY_DATA);
   const [loading, setLoading] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [openDisputeCount, setOpenDisputeCount] = useState(0);
 
   useEffect(() => {
-    Promise.all([apiGetAdminStats(), apiGetUsers(), apiGetListings()]).then(([s, u, l]) => {
-      setStats(s);
-      setUsers(u);
-      setListings(l);
+    async function load() {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+      const [usersRes, listingsRes, ordersRes] = await Promise.all([
+        fetch("/api/admin/users"),
+        supabase.from("products").select("id, category, status"),
+        supabase.from("buyer_orders").select("id, status, total, dispute"),
+      ]);
+
+      const users: { joined_at: string }[] = usersRes.ok ? await usersRes.json() : [];
+      const listings = listingsRes.data ?? [];
+      const orders = ordersRes.data ?? [];
+
+      const newUsersThisWeek = users.filter(
+        (u) => new Date(u.joined_at) >= oneWeekAgo
+      ).length;
+
+      const activeListings = listings.filter((l) => l.status === "active").length;
+      const pending = listings.filter((l) => l.status === "pending").length;
+      const openDisputes = orders.filter((o) => o.dispute && o.dispute.outcome == null).length;
+      const totalSales = orders
+        .filter((o) => o.status === "completed")
+        .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+      // Orders by status
+      const statusCounts: Record<string, number> = {};
+      orders.forEach((o) => { statusCounts[o.status] = (statusCounts[o.status] ?? 0) + 1; });
+      const orderStatusData: OrderStatusDataPoint[] = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+
+      // Listings by category
+      const catCounts: Record<string, number> = {};
+      listings.forEach((l) => { catCounts[l.category] = (catCounts[l.category] ?? 0) + 1; });
+      const catData: CategoryDataPoint[] = Object.entries(catCounts).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count);
+
+      setStats({
+        totalUsers: users.length,
+        newUsersThisWeek,
+        activeListings,
+        totalOrders: orders.length,
+        totalSalesAmount: totalSales,
+        openDisputes,
+        pendingModeration: pending,
+      });
+
+      if (orderStatusData.length > 0) setOrderStatus(orderStatusData);
+      if (catData.length > 0) setCategoryData(catData);
+      setPendingCount(pending);
+      setOpenDisputeCount(openDisputes);
       setLoading(false);
-    });
+    }
+    load();
   }, []);
 
-  const toggleUser = async (id: string) => {
-    await apiToggleUserStatus(id);
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, isActive: !u.isActive } : u));
-    showToast("User status updated.", "success");
-  };
-
-  const removeListing = async (id: string) => {
-    await apiDeleteListing(id);
-    setListings((prev) => prev.filter((l) => l.id !== id));
-    showToast("Listing removed.", "success");
-  };
-
-  const userColumns = [
-    { key: "name", header: "Name" },
-    { key: "email", header: "Email" },
-    { key: "role", header: "Role", render: (u: User) => (
-      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.role === "admin" ? "bg-violet-600/20 text-violet-400" : "bg-white/10 text-gray-400"}`}>
-        {u.role}
-      </span>
-    )},
-    { key: "joinedAt", header: "Joined", render: (u: User) => new Date(u.joinedAt).toLocaleDateString() },
-    { key: "isActive", header: "Status", render: (u: User) => (
-      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
-        {u.isActive ? "Active" : "Suspended"}
-      </span>
-    )},
-    { key: "actions", header: "Actions", render: (u: User) => (
-      <button onClick={() => toggleUser(u.id)}
-        className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${u.isActive ? "bg-red-600/20 text-red-400 hover:bg-red-600/40" : "bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40"}`}>
-        {u.isActive ? "Suspend" : "Activate"}
-      </button>
-    )},
-  ];
-
-  const listingColumns = [
-    { key: "title", header: "Title", render: (l: Listing) => <span className="font-medium text-white">{l.title}</span> },
-    { key: "sellerName", header: "Seller" },
-    { key: "category", header: "Category" },
-    { key: "price", header: "Price", render: (l: Listing) => <span className="text-violet-400 font-semibold">${l.price}</span> },
-    { key: "status", header: "Status", render: (l: Listing) => {
-      const colors: Record<string, string> = { active: "bg-emerald-500/20 text-emerald-400", sold: "bg-gray-500/20 text-gray-400", pending: "bg-amber-500/20 text-amber-400", removed: "bg-red-500/20 text-red-400" };
-      return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[l.status]}`}>{l.status}</span>;
-    }},
-    { key: "actions", header: "Actions", render: (l: Listing) => (
-      <button onClick={() => removeListing(l.id)} className="text-xs px-3 py-1 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/40 transition-colors font-medium">
-        Remove
-      </button>
-    )},
-  ];
-
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "users", label: `Users (${users.length})` },
-    { key: "listings", label: `Listings (${listings.length})` },
-  ];
+  const logs = MOCK_ACTIVITY_LOGS.slice(0, 6);
+  const maxSales = Math.max(...sales.map((s) => s.amount), 1);
+  const maxOrders = Math.max(...orderStatus.map((o) => o.count), 1);
+  const maxCat = Math.max(...categoryData.map((c) => c.count), 1);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-white">Admin Panel</h1>
-        <p className="text-gray-400 mt-1">Manage users, listings, and platform health.</p>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Stat cards */}
+      {loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => <div key={i} className="h-28 bg-slate-200 rounded-2xl animate-pulse" />)}
+        </div>
+      ) : stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <StatCard label="Total Users" value={stats.totalUsers} sub={`+${stats.newUsersThisWeek} this week`} color="violet"
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} />
+          <StatCard label="Active Listings" value={stats.activeListings} color="blue"
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>} />
+          <StatCard label="Total Orders" value={stats.totalOrders} color="green"
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>} />
+          <StatCard label="Total Sales" value={`₱${stats.totalSalesAmount.toLocaleString()}`} color="green"
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>} />
+          <StatCard label="Open Disputes" value={stats.openDisputes} color="red"
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>} />
+          <StatCard label="Pending Review" value={stats.pendingModeration} color="amber"
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
+        </div>
+      )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 w-fit mb-8">
-        {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white"}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "overview" && (
-        <div className="space-y-8">
-          {loading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[...Array(4)].map((_, i) => <div key={i} className="bg-white/5 rounded-2xl h-28 animate-pulse" />)}
-            </div>
-          ) : stats && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard label="Total Users" value={stats.totalUsers} color="text-violet-400" icon="👥" />
-              <StatCard label="Total Listings" value={stats.totalListings} color="text-sky-400" icon="📦" />
-              <StatCard label="Pending Review" value={stats.pendingModeration} color="text-amber-400" icon="⏳" />
-              <StatCard label="Reports This Month" value={stats.reportsThisMonth} color="text-red-400" icon="🚩" />
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <ChartCard title="Sales Over Time" action={<span className="text-xs text-slate-400">Last 6 months</span>}>
+          {loading ? <div className="h-40 bg-slate-100 rounded-xl animate-pulse" /> : (
+            <div className="h-40 flex items-end gap-2">
+              {sales.map((s) => (
+                <div key={s.month} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full bg-violet-500 hover:bg-violet-600 rounded-t transition-colors cursor-pointer"
+                    style={{ height: `${(s.amount / maxSales) * 130}px` }} title={`₱${s.amount.toLocaleString()}`} />
+                  <span className="text-[10px] text-slate-400">{s.month}</span>
+                </div>
+              ))}
             </div>
           )}
+        </ChartCard>
 
-          {/* Charts placeholder */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {["Listings Over Time", "User Growth"].map((title) => (
-              <div key={title} className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                <h3 className="font-semibold text-white mb-4">{title}</h3>
-                <div className="h-40 flex items-end gap-2">
-                  {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 100].map((h, i) => (
-                    <div key={i} className="flex-1 bg-violet-600/30 hover:bg-violet-600/50 rounded-t transition-colors" style={{ height: `${h}%` }} />
-                  ))}
+        <ChartCard title="Orders by Status">
+          {loading ? <div className="h-40 bg-slate-100 rounded-xl animate-pulse" /> : (
+            <div className="h-40 flex items-end gap-1.5">
+              {orderStatus.map((o, i) => {
+                const colors = ["bg-blue-400","bg-amber-400","bg-violet-400","bg-emerald-400","bg-green-500","bg-red-400","bg-orange-400"];
+                return (
+                  <div key={o.status} className="flex-1 flex flex-col items-center gap-1">
+                    <div className={`w-full ${colors[i % colors.length]} rounded-t hover:opacity-80 transition-opacity cursor-pointer`}
+                      style={{ height: `${(o.count / maxOrders) * 120}px` }} title={`${o.status}: ${o.count}`} />
+                    <span className="text-[9px] text-slate-400 truncate w-full text-center capitalize">{o.status}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Listings by Category">
+          {loading ? <div className="h-40 bg-slate-100 rounded-xl animate-pulse" /> : (
+            <div className="space-y-2">
+              {categoryData.map((c) => (
+                <div key={c.category} className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 w-20 shrink-0">{c.category}</span>
+                  <div className="flex-1 bg-slate-100 rounded-full h-2">
+                    <div className="bg-violet-500 h-2 rounded-full transition-all" style={{ width: `${(c.count / maxCat) * 100}%` }} />
+                  </div>
+                  <span className="text-xs font-medium text-slate-600 w-6 text-right">{c.count}</span>
                 </div>
-                <div className="flex justify-between text-xs text-gray-600 mt-2">
-                  <span>Jan</span><span>Jun</span><span>Dec</span>
+              ))}
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Needs attention + Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <h3 className="font-semibold text-slate-800 mb-4">Needs Attention</h3>
+          <div className="space-y-3">
+            {pendingCount > 0 && (
+              <Link href="/admin/listings" className="flex items-center justify-between p-3 bg-amber-50 border border-amber-100 rounded-xl hover:bg-amber-100 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-500">⏳</span>
+                  <span className="text-sm font-medium text-amber-800">{pendingCount} listings pending review</span>
+                </div>
+                <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            )}
+            {openDisputeCount > 0 && (
+              <Link href="/admin/disputes" className="flex items-center justify-between p-3 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="text-red-500">⚠️</span>
+                  <span className="text-sm font-medium text-red-800">{openDisputeCount} open disputes</span>
+                </div>
+                <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            )}
+            {pendingCount === 0 && openDisputeCount === 0 && (
+              <p className="text-sm text-slate-400 text-center py-4">All clear! Nothing needs attention.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-800">Recent Activity</h3>
+            <Link href="/admin/activity" className="text-xs text-violet-600 hover:text-violet-500">View all →</Link>
+          </div>
+          <div className="space-y-2">
+            {logs.map((log) => (
+              <div key={log.id} className="flex items-start gap-3 py-2 border-b border-slate-50 last:border-0">
+                <span className="text-base mt-0.5">{actionIcons[log.actionType] ?? "📋"}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-700 truncate">{log.description}</p>
+                  <p className="text-xs text-slate-400">{log.userName} · {new Date(log.createdAt).toLocaleString()}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      )}
-
-      {tab === "users" && (
-        <DataTable columns={userColumns} data={users} loading={loading} keyExtractor={(u) => u.id} emptyMessage="No users found." />
-      )}
-
-      {tab === "listings" && (
-        <DataTable columns={listingColumns} data={listings} loading={loading} keyExtractor={(l) => l.id} emptyMessage="No listings found." />
-      )}
+      </div>
     </div>
   );
 }

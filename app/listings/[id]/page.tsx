@@ -6,6 +6,7 @@ import Modal from "@/components/Modal";
 import ListingForm from "@/components/ListingForm";
 import { useToast } from "@/components/Toast";
 import { apiGetListing, apiUpdateListing, apiDeleteListing } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { Listing } from "@/lib/types";
 
 const statusColors: Record<string, string> = {
@@ -19,29 +20,37 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const router = useRouter();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  const handleBuy = async () => {
+    return; // replaced by checkout flow
+  };
+
   useEffect(() => {
     apiGetListing(id).then((data) => { setListing(data); setLoading(false); });
   }, [id]);
+
+  const isSeller = !!user && !!listing && user.id === listing.sellerId;
+  const isBuyer = !!user && !!listing && user.id !== listing.sellerId;
 
   const handleEdit = async (data: Partial<Listing>) => {
     if (!listing) return;
     const updated = await apiUpdateListing(listing.id, data);
     setListing(updated);
     setEditOpen(false);
-    showToast("Listing updated!", "success");
+    showToast("Product updated!", "success");
   };
 
   const handleDelete = async () => {
     if (!listing) return;
     setDeleteLoading(true);
     await apiDeleteListing(listing.id);
-    showToast("Listing deleted.", "info");
+    showToast("Product deleted.", "info");
     router.push("/listings");
   };
 
@@ -62,8 +71,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-20 text-center">
         <p className="text-4xl mb-3">🔍</p>
-        <h2 className="text-xl font-bold text-white mb-2">Listing not found</h2>
-        <Link href="/listings" className="text-violet-400 hover:text-violet-300">← Back to listings</Link>
+        <h2 className="text-xl font-bold text-white mb-2">Product not found</h2>
+        <Link href="/listings" className="text-violet-400 hover:text-violet-300">← Back to products</Link>
       </div>
     );
   }
@@ -71,10 +80,11 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
       <Link href="/listings" className="text-sm text-gray-400 hover:text-white transition-colors mb-6 inline-flex items-center gap-1">
-        ← Back to listings
+        ← Back to products
       </Link>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+        {/* Image */}
         <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden h-72 md:h-auto">
           {listing.images[0] ? (
             <img src={listing.images[0]} alt={listing.title} className="w-full h-full object-cover" />
@@ -95,7 +105,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
                 {listing.status}
               </span>
             </div>
-            <p className="text-3xl font-black text-violet-400">${listing.price}</p>
+            <p className="text-3xl font-black text-violet-400">₱{listing.price}</p>
           </div>
 
           <p className="text-gray-400 text-sm leading-relaxed">{listing.description}</p>
@@ -106,8 +116,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
               <p className="text-white font-medium">{listing.category}</p>
             </div>
             <div className="bg-white/5 rounded-xl p-3">
-              <p className="text-gray-500 text-xs mb-0.5">Views</p>
-              <p className="text-white font-medium">{listing.views}</p>
+              <p className="text-gray-500 text-xs mb-0.5">Sold</p>
+              <p className="text-white font-medium">{listing.stockSold}</p>
             </div>
             <div className="bg-white/5 rounded-xl p-3">
               <p className="text-gray-500 text-xs mb-0.5">Seller</p>
@@ -119,25 +129,48 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
+          {/* Action buttons — seller sees Edit + Delete, buyer sees Message Seller + Buy */}
           <div className="flex gap-3 mt-auto">
-            <Link href="/messages" className="flex-1 py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-colors text-center text-sm">
-              Message Seller
-            </Link>
-            <button onClick={() => setEditOpen(true)} className="flex-1 py-3 bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 font-semibold rounded-xl transition-colors text-sm">
-              Edit
-            </button>
-            <button onClick={() => setDeleteOpen(true)} className="flex-1 py-3 bg-red-600/20 hover:bg-red-600/40 text-red-400 font-semibold rounded-xl transition-colors text-sm">
-              Delete
-            </button>
+            {isSeller ? (
+              <>
+                <button onClick={() => setEditOpen(true)} className="flex-1 py-3 bg-violet-600/20 hover:bg-violet-600/40 text-violet-400 font-semibold rounded-xl transition-colors text-sm">
+                  Edit
+                </button>
+                <button onClick={() => setDeleteOpen(true)} className="flex-1 py-3 bg-red-600/20 hover:bg-red-600/40 text-red-400 font-semibold rounded-xl transition-colors text-sm">
+                  Delete
+                </button>
+              </>
+            ) : isBuyer ? (
+              <>
+                <Link href={`/messages?with=${listing.sellerId}&name=${encodeURIComponent(listing.sellerName)}`} className="flex-1 py-3 bg-white/10 hover:bg-white/15 text-white font-semibold rounded-xl transition-colors text-center text-sm">
+                  Message Seller
+                </Link>
+                {listing.status === "sold" ? (
+                  <div className="flex-1 py-3 bg-gray-500/20 border border-gray-500/30 text-gray-400 font-semibold rounded-xl text-center text-sm">
+                    Sold
+                  </div>
+                ) : (
+                  <Link href={`/checkout/${listing.id}`}
+                    className="flex-1 py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-colors text-center text-sm">
+                    Buy now
+                  </Link>
+                )}
+              </>
+            ) : (
+              // Not logged in — show sign in prompt
+              <Link href="/login" className="flex-1 py-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-xl transition-colors text-center text-sm">
+                Sign in to buy
+              </Link>
+            )}
           </div>
         </div>
       </div>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Listing" size="md">
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Product" size="md">
         <ListingForm initial={listing} onSubmit={handleEdit} onCancel={() => setEditOpen(false)} />
       </Modal>
 
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Listing" size="sm">
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Product" size="sm">
         <p className="text-gray-300 mb-6">Delete <span className="text-white font-semibold">&quot;{listing.title}&quot;</span>? This cannot be undone.</p>
         <div className="flex gap-3">
           <button onClick={() => setDeleteOpen(false)} className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-xl transition-colors text-sm font-medium">Cancel</button>

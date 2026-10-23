@@ -7,11 +7,15 @@ import ListingForm from "@/components/ListingForm";
 import SearchBar from "@/components/SearchBar";
 import { useToast } from "@/components/Toast";
 import { apiGetListings, apiCreateListing, apiUpdateListing, apiDeleteListing } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import type { Listing, Category, ListingStatus } from "@/lib/types";
 import { CATEGORIES } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 
 function ListingsContent() {
   const { showToast } = useToast();
+  const { user } = useAuth();
+  const isLoggedIn = !!user;
   const searchParams = useSearchParams();
   const [listings, setListings] = useState<Listing[]>([]);
   const [filtered, setFiltered] = useState<Listing[]>([]);
@@ -28,6 +32,48 @@ function ListingsContent() {
 
   useEffect(() => {
     apiGetListings().then((data) => { setListings(data); setLoading(false); });
+
+    // Realtime: auto-update when any product is inserted, updated or deleted
+    const channel = supabase
+      .channel("products-realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "products" }, (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        const newListing: Listing = {
+          id: row.id as string,
+          title: row.title as string,
+          description: row.description as string,
+          price: Number(row.price),
+          category: row.category as Listing["category"],
+          status: row.status as Listing["status"],
+          images: (row.images as string[]) ?? [],
+          sellerId: row.seller_id as string,
+          sellerName: row.seller_name as string,
+          createdAt: row.created_at as string,
+          stock: Number(row.stock),
+          stockSold: Number(row.stock_sold),
+        };
+        setListings((prev) => prev.some((l) => l.id === newListing.id) ? prev : [newListing, ...prev]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "products" }, (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        setListings((prev) => prev.map((l) => l.id !== row.id ? l : {
+          ...l,
+          title: row.title as string,
+          description: row.description as string,
+          price: Number(row.price),
+          category: row.category as Listing["category"],
+          status: row.status as Listing["status"],
+          images: (row.images as string[]) ?? [],
+          stock: Number(row.stock),
+          stockSold: Number(row.stock_sold),
+        }));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "products" }, (payload) => {
+        setListings((prev) => prev.filter((l) => l.id !== payload.old.id));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
@@ -41,10 +87,17 @@ function ListingsContent() {
   }, [listings, query, categoryFilter, statusFilter, minPrice, maxPrice]);
 
   const handleCreate = async (data: Partial<Listing>) => {
-    const created = await apiCreateListing({ ...data, sellerId: "u1", sellerName: "You", images: [], views: 0, createdAt: new Date().toISOString() });
+    const created = await apiCreateListing({
+      ...data,
+      sellerId: user?.id ?? "",
+      sellerName: user?.name ?? "Unknown",
+      stock: data.stock ?? 0,
+      stockSold: 0,
+      createdAt: new Date().toISOString(),
+    });
     setListings((prev) => [created, ...prev]);
     setCreateOpen(false);
-    showToast("Listing created!", "success");
+    showToast("Product created!", "success");
   };
 
   const handleEdit = async (data: Partial<Listing>) => {
@@ -52,7 +105,7 @@ function ListingsContent() {
     const updated = await apiUpdateListing(editTarget.id, data);
     setListings((prev) => prev.map((l) => l.id === editTarget.id ? updated : l));
     setEditTarget(null);
-    showToast("Listing updated!", "success");
+    showToast("Product updated!", "success");
   };
 
   const handleDelete = async () => {
@@ -62,7 +115,7 @@ function ListingsContent() {
     setListings((prev) => prev.filter((l) => l.id !== deleteTarget.id));
     setDeleteTarget(null);
     setDeleteLoading(false);
-    showToast("Listing deleted.", "info");
+    showToast("Product deleted.", "info");
   };
 
   const inp = "px-3 py-2 bg-white/5 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-violet-500 transition-all placeholder-gray-600";
@@ -74,9 +127,11 @@ function ListingsContent() {
           <h1 className="text-3xl font-black text-white">Listings</h1>
           <p className="text-gray-400 text-sm mt-1">{filtered.length} items found</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm">
-          + New Listing
-        </button>
+        {isLoggedIn && (
+          <button onClick={() => setCreateOpen(true)} className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm">
+            + Add Product
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -91,8 +146,8 @@ function ListingsContent() {
             <option value="All" className="bg-[#0f0f1a]">All Statuses</option>
             {["active", "sold", "pending", "removed"].map((s) => <option key={s} value={s} className="bg-[#0f0f1a]">{s}</option>)}
           </select>
-          <input type="number" placeholder="Min $" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} className={`${inp} w-24`} />
-          <input type="number" placeholder="Max $" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} className={`${inp} w-24`} />
+          <input type="number" placeholder="Min ₱" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} className={`${inp} w-24`} />
+          <input type="number" placeholder="Max ₱" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} className={`${inp} w-24`} />
         </div>
       </div>
 
@@ -109,7 +164,7 @@ function ListingsContent() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {filtered.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} showActions onEdit={setEditTarget} onDelete={setDeleteTarget} />
+            <ListingCard key={listing.id} listing={listing} showActions onEdit={setEditTarget} onDelete={setDeleteTarget} isLoggedIn={isLoggedIn} currentUserId={user?.id} />
           ))}
         </div>
       )}

@@ -3,8 +3,9 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/Toast";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+import { OrdersProvider } from "@/lib/orders-store";
+import { NotificationsProvider } from "@/lib/notifications-store";
+import UserShell from "@/components/UserShell";
 
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
@@ -19,9 +20,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col bg-[#080812] text-white antialiased">
         <AuthProvider>
           <ToastProvider>
-            <Navbar />
-            <main className="flex-1">{children}</main>
-            <Footer />
+            <OrdersProvider>
+              <NotificationsProvider>
+                <UserShell>{children}</UserShell>
+              </NotificationsProvider>
+            </OrdersProvider>
           </ToastProvider>
         </AuthProvider>
       </body>

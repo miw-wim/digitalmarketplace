@@ -13,9 +13,12 @@ interface ListingCardProps {
   onEdit?: (listing: Listing) => void;
   onDelete?: (listing: Listing) => void;
   showActions?: boolean;
+  isLoggedIn?: boolean;
+  currentUserId?: string;
 }
 
-export default function ListingCard({ listing, onEdit, onDelete, showActions }: ListingCardProps) {
+export default function ListingCard({ listing, onEdit, onDelete, showActions, isLoggedIn, currentUserId }: ListingCardProps) {
+  const isSeller = isLoggedIn && currentUserId === listing.sellerId;
   return (
     <div className="group bg-white/5 border border-white/10 rounded-2xl overflow-hidden hover:border-violet-500/50 hover:bg-white/8 transition-all duration-200">
       <Link href={`/listings/${listing.id}`}>
@@ -39,21 +42,33 @@ export default function ListingCard({ listing, onEdit, onDelete, showActions }: 
           <Link href={`/listings/${listing.id}`} className="font-semibold text-white hover:text-violet-300 transition-colors line-clamp-1 flex-1">
             {listing.title}
           </Link>
-          <span className="text-violet-400 font-bold whitespace-nowrap">${listing.price}</span>
+          <span className="text-violet-400 font-bold whitespace-nowrap">₱{listing.price}</span>
         </div>
         <p className="text-xs text-gray-500 mb-3 line-clamp-2">{listing.description}</p>
         <div className="flex items-center justify-between">
           <span className="text-xs bg-white/8 text-gray-400 px-2 py-0.5 rounded-full">{listing.category}</span>
-          <span className="text-xs text-gray-600">{listing.views} views</span>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-500">Stock: <span className="text-white font-medium">{listing.stock}</span></span>
+            <span className="text-gray-600">·</span>
+            <span className="text-gray-500">Sold: <span className="text-emerald-400 font-medium">{listing.stockSold}</span></span>
+          </div>
         </div>
         {showActions && (
           <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
-            <button onClick={() => onEdit?.(listing)} className="flex-1 text-xs py-1.5 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/40 transition-colors font-medium">
-              Edit
-            </button>
-            <button onClick={() => onDelete?.(listing)} className="flex-1 text-xs py-1.5 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/40 transition-colors font-medium">
-              Delete
-            </button>
+            {isSeller ? (
+              <>
+                <button onClick={() => onEdit?.(listing)} className="flex-1 text-xs py-1.5 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/40 transition-colors font-medium">
+                  Edit
+                </button>
+                <button onClick={() => onDelete?.(listing)} className="flex-1 text-xs py-1.5 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/40 transition-colors font-medium">
+                  Delete
+                </button>
+              </>
+            ) : (
+              <Link href={`/listings/${listing.id}`} className="flex-1 text-xs py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 transition-colors font-medium text-center">
+                View Product
+              </Link>
+            )}
           </div>
         )}
       </div>

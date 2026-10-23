@@ -1,6 +1,9 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { apiGetConversations, apiGetMessages, apiSendMessage } from "@/lib/api";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { apiGetConversations, apiGetMessages, apiSendMessage, apiGetOrCreateConversation } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 import type { Conversation, Message } from "@/lib/types";
 
 function timeAgo(iso: string) {
@@ -13,6 +16,16 @@ function timeAgo(iso: string) {
 }
 
 export default function MessagesPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto px-4 py-10"><div className="h-96 bg-white/5 rounded-2xl animate-pulse" /></div>}>
+      <MessagesContent />
+    </Suspense>
+  );
+}
+
+function MessagesContent() {
+  const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
@@ -21,36 +34,153 @@ export default function MessagesPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  // Load conversations
   useEffect(() => {
-    apiGetConversations().then((data) => { setConversations(data); setLoadingConvs(false); });
-  }, []);
+    if (!user) return;
+    apiGetConversations(user.id).then((data) => {
+      setConversations(data);
+      setLoadingConvs(false);
 
+      // If redirected from "Message Seller" with ?with=<userId>&name=<name>
+      const withUserId = searchParams.get("with");
+      const withName = searchParams.get("name");
+      if (withUserId && withName && user) {
+        apiGetOrCreateConversation(user.id, withUserId).then((convId) => {
+          const existing = data.find((c) => c.id === convId);
+          if (existing) {
+            setActiveConv(existing);
+          } else {
+            // New conversation — add it to list
+            const newConv: Conversation = {
+              id: convId,
+              participantId: withUserId,
+              participantName: decodeURIComponent(withName),
+              lastMessage: "",
+              lastMessageAt: new Date().toISOString(),
+              unreadCount: 0,
+              isAdmin: false,
+            };
+            setConversations((prev) => [newConv, ...prev]);
+            setActiveConv(newConv);
+          }
+        });
+      }
+    });
+  }, [user, searchParams]);
+
+  // Load messages when conversation changes
   useEffect(() => {
     if (!activeConv) return;
     setLoadingMsgs(true);
-    apiGetMessages(activeConv.id).then((data) => { setMessages(data); setLoadingMsgs(false); });
+    apiGetMessages(activeConv.id).then((data) => {
+      setMessages(data);
+      setLoadingMsgs(false);
+    });
   }, [activeConv]);
 
+  // Real-time listener for new messages in active conversation
+  useEffect(() => {
+    if (!activeConv) return;
+
+    // Remove previous channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`messages:${activeConv.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${activeConv.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const newMsg: Message = {
+            id: row.id as string,
+            senderId: row.sender_id as string,
+            senderName: row.sender_name as string,
+            content: row.content as string,
+            createdAt: row.created_at as string,
+            read: row.read as boolean,
+          };
+          // Avoid duplicate if we already added it optimistically
+          setMessages((prev) =>
+            prev.find((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]
+          );
+        }
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeConv]);
+
+  // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !activeConv) return;
+    if (!input.trim() || !activeConv || !user) return;
     setSending(true);
-    const msg = await apiSendMessage(activeConv.id, input.trim());
-    setMessages((prev) => [...prev, msg]);
+    const content = input.trim();
     setInput("");
+
+    // Optimistic update
+    const optimistic: Message = {
+      id: `temp-${Date.now()}`,
+      senderId: user.id,
+      senderName: user.name,
+      content,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
+    try {
+      const saved = await apiSendMessage(activeConv.id, content, user.id, user.name);
+      // Replace optimistic with real
+      setMessages((prev) => prev.map((m) => m.id === optimistic.id ? saved : m));
+      // Update last message in conv list
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConv.id
+            ? { ...c, lastMessage: content, lastMessageAt: saved.createdAt }
+            : c
+        )
+      );
+    } catch {
+      // Remove optimistic on failure
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+    }
+
     setSending(false);
   };
+
+  if (!user) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center">
+        <p className="text-gray-400">Please <a href="/login" className="text-violet-400 hover:text-violet-300">sign in</a> to view messages.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
       <h1 className="text-3xl font-black text-white mb-6">Messages</h1>
 
       <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex h-[600px]">
+
         {/* Conversation list */}
         <div className={`w-full sm:w-72 border-r border-white/10 flex flex-col ${activeConv ? "hidden sm:flex" : "flex"}`}>
           <div className="p-4 border-b border-white/10">
@@ -62,7 +192,10 @@ export default function MessagesPage() {
                 {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-white/5 rounded-xl animate-pulse" />)}
               </div>
             ) : conversations.length === 0 ? (
-              <div className="p-8 text-center text-gray-500 text-sm">No conversations yet.</div>
+              <div className="p-8 text-center text-gray-500 text-sm">
+                <p className="text-3xl mb-2">💬</p>
+                No conversations yet.
+              </div>
             ) : (
               conversations.map((conv) => (
                 <button key={conv.id} onClick={() => setActiveConv(conv)}
@@ -72,14 +205,13 @@ export default function MessagesPage() {
                     <span className="text-xs text-gray-500 shrink-0 ml-2">{timeAgo(conv.lastMessageAt)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-gray-500 truncate flex-1">{conv.lastMessage}</p>
+                    <p className="text-xs text-gray-500 truncate flex-1">{conv.lastMessage || "No messages yet"}</p>
                     {conv.unreadCount > 0 && (
                       <span className="ml-2 bg-violet-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shrink-0">
                         {conv.unreadCount}
                       </span>
                     )}
                   </div>
-                  {conv.isAdmin && <span className="text-xs text-violet-400 font-medium">Support</span>}
                 </button>
               ))
             )}
@@ -100,9 +232,12 @@ export default function MessagesPage() {
               {/* Thread header */}
               <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3">
                 <button onClick={() => setActiveConv(null)} className="sm:hidden text-gray-400 hover:text-white">←</button>
+                <div className="w-8 h-8 rounded-full bg-violet-600/30 flex items-center justify-center text-violet-300 text-xs font-bold">
+                  {activeConv.participantName[0].toUpperCase()}
+                </div>
                 <div>
                   <p className="font-semibold text-white text-sm">{activeConv.participantName}</p>
-                  {activeConv.isAdmin && <p className="text-xs text-violet-400">Shopora Support</p>}
+                  <p className="text-xs text-green-400">Active</p>
                 </div>
               </div>
 
@@ -110,13 +245,15 @@ export default function MessagesPage() {
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {loadingMsgs ? (
                   <div className="space-y-3">
-                    {[...Array(3)].map((_, i) => <div key={i} className={`h-12 bg-white/5 rounded-xl animate-pulse ${i % 2 === 0 ? "w-2/3" : "w-2/3 ml-auto"}`} />)}
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className={`h-12 bg-white/5 rounded-xl animate-pulse ${i % 2 === 0 ? "w-2/3" : "w-2/3 ml-auto"}`} />
+                    ))}
                   </div>
                 ) : messages.length === 0 ? (
                   <p className="text-center text-gray-500 text-sm py-8">No messages yet. Say hello!</p>
                 ) : (
                   messages.map((msg) => {
-                    const isMe = msg.senderId === "u1";
+                    const isMe = msg.senderId === user.id;
                     return (
                       <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl text-sm ${isMe ? "bg-violet-600 text-white rounded-br-sm" : "bg-white/10 text-gray-200 rounded-bl-sm"}`}>

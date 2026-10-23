@@ -1,18 +1,28 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import SearchBar from "@/components/SearchBar";
 import ListingCard from "@/components/ListingCard";
 import { apiGetListings } from "@/lib/api";
 import type { Listing, Category } from "@/lib/types";
 import { CATEGORIES } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 
 export default function HomePage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [listings, setListings] = useState<Listing[]>([]);
   const [filtered, setFiltered] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<Category | "All">("All");
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!authLoading && user?.role === "admin") {
+      router.replace("/admin");
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     apiGetListings().then((data) => {

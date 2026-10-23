@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiGetDashboardStats, apiGetActivity } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useOrders } from "@/lib/orders-store";
 import type { DashboardStats, ActivityItem } from "@/lib/types";
 
 const activityIcons: Record<string, string> = {
@@ -27,6 +28,7 @@ function StatCard({ label, value, sub, color }: { label: string; value: number |
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const { orders } = useOrders();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,18 +39,27 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    if (!user) return;
+    if (user.role === "admin") {
+      router.replace("/admin");
+      return;
+    }
     Promise.all([apiGetDashboardStats(), apiGetActivity()]).then(([s, a]) => {
       setStats(s);
       setActivity(a);
       setLoading(false);
     });
-  }, []);
+  }, [user]);
+
+  const ordersInTransit = orders.filter((o) => o.buyerId === user?.id && ["placed", "shipped"].includes(o.status)).length;
 
   const quickActions = [
     { label: "New Listing", href: "/listings?action=create", icon: "+" },
     { label: "My Listings", href: "/listings?mine=true", icon: "📋" },
+    { label: "My Sales", href: "/sales", icon: "🏪" },
     { label: "Messages", href: "/messages", icon: "💬" },
     { label: "Activity", href: "/activity", icon: "📊" },
+    { label: "My Purchases", href: "/purchases", icon: "🛍️" },
   ];
 
   return (
@@ -69,15 +80,16 @@ export default function DashboardPage() {
 
       {/* Stats */}
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[...Array(4)].map((_, i) => <div key={i} className="bg-white/5 rounded-2xl h-28 animate-pulse" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          {[...Array(5)].map((_, i) => <div key={i} className="bg-white/5 rounded-2xl h-28 animate-pulse" />)}
         </div>
       ) : stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <StatCard label="My Listings" value={stats.myListings} sub="total posted" color="text-violet-400" />
           <StatCard label="Active" value={stats.activeListings} sub="currently live" color="text-emerald-400" />
           <StatCard label="Messages" value={stats.messages} sub="conversations" color="text-sky-400" />
           <StatCard label="Total Views" value={stats.totalViews} sub="across all listings" color="text-amber-400" />
+          <StatCard label="Orders in Transit" value={ordersInTransit} sub="being shipped" color="text-orange-400" />
         </div>
       )}
 
@@ -122,6 +134,32 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* My Purchases */}
+      <div className="mt-6 bg-white/5 border border-white/10 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-white">My Purchases</h2>
+          <Link href="/purchases" className="text-xs text-violet-400 hover:text-violet-300">View all →</Link>
+        </div>
+        {orders.filter((o) => o.buyerId === user?.id).length === 0 ? (
+          <p className="text-gray-500 text-sm text-center py-6">No purchases yet. <Link href="/listings" className="text-violet-400 hover:text-violet-300">Browse listings</Link></p>
+        ) : (
+          <div className="space-y-2">
+            {orders.filter((o) => o.buyerId === user?.id).slice(0, 3).map((order) => (
+              <div key={order.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl transition-colors">
+                <div>
+                  <p className="text-sm text-white font-medium">{order.listingTitle}</p>
+                  <p className="text-xs text-gray-500">from {order.sellerName} · {new Date(order.createdAt).toLocaleDateString()}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-violet-400 font-bold text-sm">₱{order.total}</span>
+                  <Link href={`/purchases/${order.id}`} className="text-xs text-gray-400 hover:text-white transition-colors">View →</Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
