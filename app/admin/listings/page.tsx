@@ -130,9 +130,9 @@ export default function AdminListingsPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-4">
-        <AdminDataTable columns={columns} data={filtered as unknown as Record<string, unknown>[]} loading={loading}
-          keyExtractor={(l) => (l as unknown as AdminListing).id} emptyMessage="No listings found." searchable
-          searchKeys={["title" as never, "sellerName" as never]} pageSize={8} />
+        <AdminDataTable columns={columns} data={filtered} loading={loading}
+          keyExtractor={(l) => l.id} emptyMessage="No listings found." searchable
+          searchKeys={["title", "sellerName"]} pageSize={8} />
       </div>
 
       <ConfirmDialog open={confirm?.type === "approve"} title="Approve Listing"

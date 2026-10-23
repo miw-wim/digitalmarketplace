@@ -70,8 +70,8 @@ export default function OrderTimeline({ order }: { order: Order }) {
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-red-400">{stepLabels[order.status]}</p>
-            {getTimestamp(order.status) && (
-              <p className="text-xs text-gray-500 mt-0.5">{new Date(getTimestamp(order.status)!).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+            {getEvent(order.status)?.timestamp && (
+              <p className="text-xs text-gray-500 mt-0.5">{new Date(getEvent(order.status)!.timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
             )}
           </div>
         </div>

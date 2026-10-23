@@ -19,7 +19,7 @@ interface Props<T> {
   searchKeys?: (keyof T)[];
 }
 
-export default function AdminDataTable<T extends Record<string, unknown>>({
+export default function AdminDataTable<T>({
   columns, data, loading, keyExtractor, emptyMessage = "No data found.", pageSize = 10, searchable, searchKeys = [],
 }: Props<T>) {
   const [page, setPage] = useState(1);
@@ -35,8 +35,8 @@ export default function AdminDataTable<T extends Record<string, unknown>>({
     }
     if (sortKey) {
       d = [...d].sort((a, b) => {
-        const av = String(a[sortKey] ?? "");
-        const bv = String(b[sortKey] ?? "");
+        const av = String((a as Record<string, unknown>)[sortKey] ?? "");
+        const bv = String((b as Record<string, unknown>)[sortKey] ?? "");
         return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
       });
     }
@@ -100,7 +100,7 @@ export default function AdminDataTable<T extends Record<string, unknown>>({
                 <tr key={keyExtractor(row)} className="hover:bg-slate-50 transition-colors">
                   {columns.map((col) => (
                     <td key={col.key} className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                      {col.render ? col.render(row) : String(row[col.key] ?? "")}
+                      {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "")}
                     </td>
                   ))}
                 </tr>

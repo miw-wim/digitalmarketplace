@@ -95,13 +95,13 @@ export default function AdminPaymentsPage() {
 
       <div className="bg-white border border-slate-200 rounded-2xl p-4">
         <AdminDataTable
-          columns={(tab === "gcash" ? gcashColumns : codColumns) as Column<Record<string, unknown>>[]}
-          data={(tab === "gcash" ? gcash : cod) as unknown as Record<string, unknown>[]}
+          columns={tab === "gcash" ? gcashColumns : codColumns}
+          data={tab === "gcash" ? gcash : cod}
           loading={loading}
-          keyExtractor={(p) => (p as unknown as AdminPayment).id}
+          keyExtractor={(p) => p.id}
           emptyMessage="No payments found."
           searchable
-          searchKeys={["orderId" as never, "buyerName" as never]}
+          searchKeys={["orderId", "buyerName"]}
           pageSize={8}
         />
       </div>

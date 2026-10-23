@@ -87,9 +87,9 @@ export default function AdminOrdersPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-4">
-        <AdminDataTable columns={columns} data={filtered as unknown as Record<string, unknown>[]} loading={loading}
-          keyExtractor={(o) => (o as unknown as AdminOrder).id} emptyMessage="No orders found."
-          searchable searchKeys={["id" as never, "buyerName" as never]} pageSize={8} />
+        <AdminDataTable columns={columns} data={filtered} loading={loading}
+          keyExtractor={(o) => o.id} emptyMessage="No orders found."
+          searchable searchKeys={["id", "buyerName"]} pageSize={8} />
       </div>
 
       <Modal open={!!selected} onClose={() => setSelected(null)} title={`Order ${selected?.id}`} size="lg">

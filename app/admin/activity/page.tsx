@@ -89,13 +89,13 @@ export default function AdminActivityPage() {
 
       <div className="bg-white border border-slate-200 rounded-2xl p-4">
         <AdminDataTable
-          columns={columns as Column<Record<string, unknown>>[]}
-          data={filtered as unknown as Record<string, unknown>[]}
+          columns={columns}
+          data={filtered}
           loading={loading}
-          keyExtractor={(l) => (l as unknown as ActivityLog).id}
+          keyExtractor={(l) => l.id}
           emptyMessage="No activity logs found."
           searchable
-          searchKeys={["userName" as never, "description" as never]}
+          searchKeys={["userName", "description"]}
           pageSize={10}
         />
       </div>

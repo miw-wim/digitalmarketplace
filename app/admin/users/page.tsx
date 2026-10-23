@@ -133,9 +133,9 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-4">
-        <AdminDataTable columns={columns} data={filtered as unknown as Record<string, unknown>[]} loading={loading}
-          keyExtractor={(u) => (u as unknown as AdminUser).id} emptyMessage="No users found." searchable
-          searchKeys={["name" as never, "email" as never]} pageSize={8} />
+        <AdminDataTable columns={columns} data={filtered} loading={loading}
+          keyExtractor={(u) => u.id} emptyMessage="No users found." searchable
+          searchKeys={["name", "email"]} pageSize={8} />
       </div>
 
       <ConfirmDialog open={confirm?.type === "toggle"} title={confirm?.user.status === "active" ? "Suspend User" : "Reactivate User"}
